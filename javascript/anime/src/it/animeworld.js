@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "isManga": false,
     "itemType": 1,
-    "version": "0.0.14",
+    "version": "0.0.15",
     "dateFormat": "",
     "dateFormatLocale": "",
     "pkgPath": "anime/src/it/animeworld.js"
@@ -122,37 +122,35 @@ class DefaultExtension extends MProvider {
     }
     // For anime episode video list
     async getVideoList(url) {
+        // Recupera la pagina episodio per determinare il tipo audio (Doppiato/Subbato)
         const res = await this.client.get(url);
         const doc = new Document(res.body);
-        const promises = [];
-        const videos = [];
-
         const type = doc.selectFirst('div.info div.info dt:contains(Audio) + dd').text.trim() == 'Italiano' ?
             'Doppiato' : 'Subbato';
 
-        for (const element of doc.select('div#download a')) {
-            const host = /Download (.*?) -/.exec(element.text)?.[1];
-            // FIX: forziamo l'URL ad essere assoluto (alcuni href ora arrivano relativi
-            // e causavano "RhttpUnknownException: relative URL without a base")
-            let url = absUrl(element.getHref, this.source.baseUrl + '/');
+        // Estrai il token episodio dall'URL (ultimo segmento del path)
+        // es. /play/nome-anime.XXXXX/TOKEN  →  TOKEN
+        const token = url.split('/').pop();
 
-            if (!host || host == 'Diretto') {
-                // ignore
-                continue;
-            } else if (host == 'Alternativo') {
-                videos.push({url: url, originalUrl: url, quality: `Italiano ${type} Alternativo`, headers: null});
-                continue;
-            } else {
-                url = url.replace('/d/', '/e/');
-            }
-            promises.push(extractAny(url, host.toLowerCase(), 'Italiano', type, host));
+        // Chiama la nuova API interna AnimeWorld che restituisce l'iframe player
+        const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
+        const apiRes = await this.client.get(apiUrl);
+        const apiDoc = new Document(apiRes.body);
+
+        const videos = [];
+
+        // Il video è un <source src="..."> dentro un <video>
+        const videoUrl = apiDoc.selectFirst('source')?.getSrc;
+        if (videoUrl) {
+            videos.push({
+                url: videoUrl,
+                originalUrl: videoUrl,
+                quality: `Italiano ${type} AnimeWorld`,
+                headers: null
+            });
         }
-        for (const p of (await Promise.allSettled(promises))) {
-            if (p.status == 'fulfilled') {
-                videos.push.apply(videos, p.value);
-            }
-        }
-        return sortVideos(videos);
+
+        return videos;
     }
     getFilterList() {
         return [
