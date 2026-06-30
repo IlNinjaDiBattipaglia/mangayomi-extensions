@@ -12,7 +12,7 @@ class AnimeSaturn extends MProvider {
   Future<MPages> getPopular(int page) async {
     final res =
         (await client.get(
-          Uri.parse("${source.baseUrl}/animeincorso?page=$page"),
+          Uri.parse("${source.baseUrl}/ongoing/$page"),
         )).body;
 
     List<MManga> animeList = [];
