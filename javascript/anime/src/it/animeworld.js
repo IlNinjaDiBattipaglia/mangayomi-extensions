@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "isManga": false,
     "itemType": 1,
-    "version": "0.0.20",
+    "version": "0.0.21",
     "dateFormat": "",
     "dateFormatLocale": "",
     "pkgPath": "anime/src/it/animeworld.js"
@@ -15,8 +15,8 @@ const mangayomiSources = [{
 
 class DefaultExtension extends MProvider {
     constructor () {
-    super();
-    this.client = new Client({ 'useDartHttpClient': true });
+        super();
+        this.client = new Client();
     }
     getHeaders(url) {
         throw new Error("getHeaders not implemented");
@@ -121,41 +121,36 @@ class DefaultExtension extends MProvider {
         return detail;
     }
     // For anime episode video list
-    function withTimeout(promise, ms, label) {
-    return Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error(`TIMEOUT: ${label}`)), ms))
-    ]);
-    }
     async getVideoList(url) {
-    try {
-        const res = await withTimeout(this.client.get(url), 10000, 'episode page');
+        // Recupera la pagina episodio per determinare il tipo audio (Doppiato/Subbato)
+        const res = await this.client.get(url);
         const doc = new Document(res.body);
         const type = doc.selectFirst('div.info div.info dt:contains(Audio) + dd').text.trim() == 'Italiano' ?
             'Doppiato' : 'Subbato';
 
+        // Estrai il token episodio dall'URL (ultimo segmento del path)
+        // es. /play/nome-anime.XXXXX/TOKEN  →  TOKEN
         const token = url.split('/').pop();
+
+        // Chiama la nuova API interna AnimeWorld che restituisce l'iframe player
         const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
-        const apiRes = await withTimeout(this.client.get(apiUrl), 10000, 'internal api');
+        const apiRes = await this.client.get(apiUrl);
         const apiDoc = new Document(apiRes.body);
 
-        const videoUrl = apiDoc.selectFirst('source')?.getSrc;
-        const debugInfo = `token=${token} status=${apiRes.statusCode} len=${apiRes.body?.length ?? 0}`;
+        const videos = [];
 
-        return [{
-            url: videoUrl || 'https://example.com/debug.mp4',
-            originalUrl: videoUrl || debugInfo,
-            quality: videoUrl ? `Italiano ${type} AnimeWorld` : debugInfo.slice(0, 60),
-            headers: null
-        }];
-    } catch (e) {
-        return [{
-            url: 'https://example.com/debug.mp4',
-            originalUrl: 'CATCH: ' + (e?.message ?? String(e)),
-            quality: 'ERRORE',
-            headers: null
-        }];
-    }
+        // Il video è un <source src="..."> dentro un <video>
+        const videoUrl = apiDoc.selectFirst('source')?.getSrc;
+        if (videoUrl) {
+            videos.push({
+                url: videoUrl,
+                originalUrl: videoUrl,
+                quality: `Italiano ${type} AnimeWorld`,
+                headers: null
+            });
+        }
+
+        return videos;
     }
     getFilterList() {
         return [
