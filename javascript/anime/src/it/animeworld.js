@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "isManga": false,
     "itemType": 1,
-    "version": "0.0.18",
+    "version": "0.0.19",
     "dateFormat": "",
     "dateFormatLocale": "",
     "pkgPath": "anime/src/it/animeworld.js"
@@ -122,40 +122,34 @@ class DefaultExtension extends MProvider {
     }
     // For anime episode video list
     async getVideoList(url) {
-    const headers = {
-        'Referer': url,
-        'X-Requested-With': 'XMLHttpRequest'
-    };
+    try {
+        const res = await this.client.get(url);
+        const doc = new Document(res.body);
+        const type = doc.selectFirst('div.info div.info dt:contains(Audio) + dd').text.trim() == 'Italiano' ?
+            'Doppiato' : 'Subbato';
 
-    const res = await this.client.get(url, headers);
-    const doc = new Document(res.body);
-    const type = doc.selectFirst('div.info div.info dt:contains(Audio) + dd').text.trim() == 'Italiano' ?
-        'Doppiato' : 'Subbato';
+        const token = url.split('/').pop();
+        const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
+        const apiRes = await this.client.get(apiUrl);
+        const apiDoc = new Document(apiRes.body);
 
-    const token = url.split('/').pop();
-    const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
-    const apiRes = await this.client.get(apiUrl, headers);
-    const apiDoc = new Document(apiRes.body);
+        const videoUrl = apiDoc.selectFirst('source')?.getSrc;
 
-    const videoUrl = apiDoc.selectFirst('source')?.getSrc;
-
-    if (videoUrl) {
+        const debugInfo = `token=${token} status=${apiRes.statusCode} len=${apiRes.body?.length ?? 0}`;
         return [{
-            url: videoUrl,
-            originalUrl: videoUrl,
-            quality: `Italiano ${type} AnimeWorld`,
-            headers: headers
+            url: videoUrl || 'https://example.com/debug.mp4',
+            originalUrl: videoUrl || debugInfo,
+            quality: videoUrl ? `Italiano ${type} AnimeWorld` : debugInfo.slice(0, 60),
+            headers: null
+        }];
+    } catch (e) {
+        return [{
+            url: 'https://example.com/debug.mp4',
+            originalUrl: 'CATCH: ' + (e?.message ?? String(e)),
+            quality: 'ERRORE',
+            headers: null
         }];
     }
-
-    // DEBUG: nessun video trovato, restituiamo l'info come "video" fittizio
-    const debugInfo = `token=${token} status=${apiRes.statusCode} len=${apiRes.body.length}`;
-    return [{
-        url: 'https://example.com/debug.mp4',
-        originalUrl: debugInfo,
-        quality: debugInfo.slice(0, 60),
-        headers: null
-    }];
     }
     getFilterList() {
         return [
