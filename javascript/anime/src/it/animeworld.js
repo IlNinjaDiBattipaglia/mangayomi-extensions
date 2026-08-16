@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "isManga": false,
     "itemType": 1,
-    "version": "0.0.19",
+    "version": "0.0.20",
     "dateFormat": "",
     "dateFormatLocale": "",
     "pkgPath": "anime/src/it/animeworld.js"
@@ -15,8 +15,8 @@ const mangayomiSources = [{
 
 class DefaultExtension extends MProvider {
     constructor () {
-        super();
-        this.client = new Client();
+    super();
+    this.client = new Client({ 'useDartHttpClient': true });
     }
     getHeaders(url) {
         throw new Error("getHeaders not implemented");
@@ -121,21 +121,27 @@ class DefaultExtension extends MProvider {
         return detail;
     }
     // For anime episode video list
+    function withTimeout(promise, ms, label) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(`TIMEOUT: ${label}`)), ms))
+    ]);
+    }
     async getVideoList(url) {
     try {
-        const res = await this.client.get(url);
+        const res = await withTimeout(this.client.get(url), 10000, 'episode page');
         const doc = new Document(res.body);
         const type = doc.selectFirst('div.info div.info dt:contains(Audio) + dd').text.trim() == 'Italiano' ?
             'Doppiato' : 'Subbato';
 
         const token = url.split('/').pop();
         const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
-        const apiRes = await this.client.get(apiUrl);
+        const apiRes = await withTimeout(this.client.get(apiUrl), 10000, 'internal api');
         const apiDoc = new Document(apiRes.body);
 
         const videoUrl = apiDoc.selectFirst('source')?.getSrc;
-
         const debugInfo = `token=${token} status=${apiRes.statusCode} len=${apiRes.body?.length ?? 0}`;
+
         return [{
             url: videoUrl || 'https://example.com/debug.mp4',
             originalUrl: videoUrl || debugInfo,
