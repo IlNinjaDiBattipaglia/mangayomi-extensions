@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "isManga": false,
     "itemType": 1,
-    "version": "0.0.17",
+    "version": "0.0.18",
     "dateFormat": "",
     "dateFormatLocale": "",
     "pkgPath": "anime/src/it/animeworld.js"
@@ -133,23 +133,29 @@ class DefaultExtension extends MProvider {
         'Doppiato' : 'Subbato';
 
     const token = url.split('/').pop();
-
     const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
     const apiRes = await this.client.get(apiUrl, headers);
     const apiDoc = new Document(apiRes.body);
 
-    const videos = [];
     const videoUrl = apiDoc.selectFirst('source')?.getSrc;
+
     if (videoUrl) {
-        videos.push({
+        return [{
             url: videoUrl,
             originalUrl: videoUrl,
             quality: `Italiano ${type} AnimeWorld`,
             headers: headers
-        });
+        }];
     }
 
-    return videos;
+    // DEBUG: nessun video trovato, restituiamo l'info come "video" fittizio
+    const debugInfo = `token=${token} status=${apiRes.statusCode} len=${apiRes.body.length}`;
+    return [{
+        url: 'https://example.com/debug.mp4',
+        originalUrl: debugInfo,
+        quality: debugInfo.slice(0, 60),
+        headers: null
+    }];
     }
     getFilterList() {
         return [
