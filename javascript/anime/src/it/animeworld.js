@@ -122,35 +122,34 @@ class DefaultExtension extends MProvider {
     }
     // For anime episode video list
     async getVideoList(url) {
-        // Recupera la pagina episodio per determinare il tipo audio (Doppiato/Subbato)
-        const res = await this.client.get(url);
-        const doc = new Document(res.body);
-        const type = doc.selectFirst('div.info div.info dt:contains(Audio) + dd').text.trim() == 'Italiano' ?
-            'Doppiato' : 'Subbato';
+    const headers = {
+        'Referer': url,
+        'X-Requested-With': 'XMLHttpRequest'
+    };
 
-        // Estrai il token episodio dall'URL (ultimo segmento del path)
-        // es. /play/nome-anime.XXXXX/TOKEN  →  TOKEN
-        const token = url.split('/').pop();
+    const res = await this.client.get(url, headers);
+    const doc = new Document(res.body);
+    const type = doc.selectFirst('div.info div.info dt:contains(Audio) + dd').text.trim() == 'Italiano' ?
+        'Doppiato' : 'Subbato';
 
-        // Chiama la nuova API interna AnimeWorld che restituisce l'iframe player
-        const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
-        const apiRes = await this.client.get(apiUrl);
-        const apiDoc = new Document(apiRes.body);
+    const token = url.split('/').pop();
 
-        const videos = [];
+    const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
+    const apiRes = await this.client.get(apiUrl, headers);
+    const apiDoc = new Document(apiRes.body);
 
-        // Il video è un <source src="..."> dentro un <video>
-        const videoUrl = apiDoc.selectFirst('source')?.getSrc;
-        if (videoUrl) {
-            videos.push({
-                url: videoUrl,
-                originalUrl: videoUrl,
-                quality: `Italiano ${type} AnimeWorld`,
-                headers: null
-            });
-        }
+    const videos = [];
+    const videoUrl = apiDoc.selectFirst('source')?.getSrc;
+    if (videoUrl) {
+        videos.push({
+            url: videoUrl,
+            originalUrl: videoUrl,
+            quality: `Italiano ${type} AnimeWorld`,
+            headers: headers
+        });
+    }
 
-        return videos;
+    return videos;
     }
     getFilterList() {
         return [
