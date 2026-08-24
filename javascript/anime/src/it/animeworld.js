@@ -10,6 +10,7 @@ const mangayomiSources = [{
     "version": "0.0.23",
     "dateFormat": "",
     "dateFormatLocale": "",
+    "hasCloudflare": true,
     "pkgPath": "anime/src/it/animeworld.js"
 }];
 
