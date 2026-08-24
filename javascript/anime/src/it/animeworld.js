@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "isManga": false,
     "itemType": 1,
-    "version": "0.0.21",
+    "version": "0.0.22",
     "dateFormat": "",
     "dateFormatLocale": "",
     "pkgPath": "anime/src/it/animeworld.js"
@@ -130,7 +130,7 @@ class DefaultExtension extends MProvider {
 
         // Estrai il token episodio dall'URL (ultimo segmento del path)
         // es. /play/nome-anime.XXXXX/TOKEN  →  TOKEN
-        const token = url.split('/').pop();
+        const token = url.split('/').filter(Boolean).pop();
 
         // Chiama la nuova API interna AnimeWorld che restituisce l'iframe player
         const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
