@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "isManga": false,
     "itemType": 1,
-    "version": "0.0.25",
+    "version": "0.0.26",
     "dateFormat": "",
     "dateFormatLocale": "",
     "hasCloudflare": true,
@@ -18,12 +18,18 @@ class DefaultExtension extends MProvider {
     constructor () {
         super();
         this.client = new Client();
+        this.defaultUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
     }
+
     getHeaders(url) {
-        throw new Error("getHeaders not implemented");
+        return {
+            'User-Agent': this.defaultUserAgent,
+            'Referer': this.source.baseUrl + '/'
+        };
     }
+
     async parseAnimeList(url) {
-        const res = await this.client.get(url);
+        const res = await this.client.get(url, this.getHeaders(url));
         const doc = new Document(res.body);
         const elements = doc.select("div#main div.film-list div.item");
         const list = [];
@@ -41,6 +47,7 @@ class DefaultExtension extends MProvider {
         const hasNextPage = parseInt(doc.selectFirst('span.total').text) > parseInt(url.match(/page=(\d+)/)[1]);
         return { "list": list, "hasNextPage": hasNextPage };
     }
+
     parseStatus(status) {
         return {
             "in corso": 0,
@@ -49,8 +56,9 @@ class DefaultExtension extends MProvider {
             "non rilasciato": 4,
         }[status.toLowerCase()] ?? 5;
     }
+
     async getPopular(page) {
-        const res = await this.client.get(this.source.baseUrl + '/tops/ongoing');
+        const res = await this.client.get(this.source.baseUrl + '/tops/ongoing', this.getHeaders(this.source.baseUrl));
         const doc = new Document(res.body);
         const elements = doc.select('div.content div.item');
         const list = [];
@@ -63,13 +71,14 @@ class DefaultExtension extends MProvider {
         }
         return { "list": list, "hasNextPage": false };
     }
+
     async getLatestUpdates(page) {
         return await this.parseAnimeList(`${this.source.baseUrl}/filter?sort=1&page=${page}`);
     }
+
     async search(query, page, filters) {
         query = query.trim().replaceAll(/\ +/g, "+");
 
-        // Search sometimes failed because filters were empty. I experienced this mostly on android...
         if (!filters || filters.length == 0) {
             return await this.parseAnimeList(`${this.source.baseUrl}/search?keyword=${query}&page=${page}`);
         }
@@ -98,8 +107,9 @@ class DefaultExtension extends MProvider {
         }
         return await this.parseAnimeList(url + `&page=${page}`);
     }
+
     async getDetail(url) {
-        const res = await this.client.get(this.source.baseUrl + url);
+        const res = await this.client.get(this.source.baseUrl + url, this.getHeaders(url));
         const doc = new Document(res.body);
         const detail = {};
 
@@ -121,15 +131,13 @@ class DefaultExtension extends MProvider {
         }
         return detail;
     }
-    // For anime episode video list
+
     async getVideoList(url) {
-        // Recupera la pagina episodio per determinare il tipo audio (Doppiato/Subbato)
-        const res = await this.client.get(url);
+        const res = await this.client.get(url, this.getHeaders(url));
         const doc = new Document(res.body);
         const type = doc.selectFirst('div.info div.info dt:contains(Audio) + dd').text.trim() == 'Italiano' ?
             'Doppiato' : 'Subbato';
 
-        // Estrai il token episodio dal JSON-LD incorporato nella pagina.
         let token;
         try {
             const ldJsonText = doc.selectFirst('script[type="application/ld+json"]').text;
@@ -139,34 +147,33 @@ class DefaultExtension extends MProvider {
             token = url.split('/').filter(Boolean).pop();
         }
 
-        // Chiama la nuova API interna AnimeWorld che restituisce l'iframe player.
-        // Header necessari: il sito la tratta come una richiesta AJAX interna,
-        // quindi va accompagnata da Referer e X-Requested-With, altrimenti
-        // risponde con una pagina "decoy" invece del contenuto reale.
         const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
         const apiRes = await this.client.get(apiUrl, {
+            'User-Agent': this.defaultUserAgent,
             'Referer': url,
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json, text/javascript, */*; q=0.01'
         });
-        console.log(apiRes.body); // temporaneo, per debug
+
         const apiDoc = new Document(apiRes.body);
-
         const videos = [];
-
-        // Il video è un <source src="..."> dentro un <video>
         const videoUrl = apiDoc.selectFirst('source')?.getSrc;
+
         if (videoUrl) {
             videos.push({
                 url: videoUrl,
                 originalUrl: videoUrl,
                 quality: `Italiano ${type} AnimeWorld`,
-                headers: null
+                headers: {
+                    'User-Agent': this.defaultUserAgent,
+                    'Referer': this.source.baseUrl + '/'
+                }
             });
         }
 
         return videos;
     }
+
     getFilterList() {
         return [
             {
@@ -277,6 +284,7 @@ class DefaultExtension extends MProvider {
             }
         ];
     }
+
     getSourcePreferences() {
         const languages = ['Italiano'];
         const types = ['Doppiato', 'Subbato'];
@@ -328,79 +336,20 @@ class DefaultExtension extends MProvider {
     }
 }
 
-/***************************************************************************************************
-* 
-*   mangayomi-js-helpers v1.2
-*       
-*   # Video Extractors
-*       - vidGuardExtractor
-*       - doodExtractor
-*       - vidozaExtractor
-*       - okruExtractor
-*       - amazonExtractor
-*       - vidHideExtractor
-*       - filemoonExtractor
-*       - mixdropExtractor
-*       - speedfilesExtractor
-*       - luluvdoExtractor
-*       - burstcloudExtractor (not working, see description)
-*   
-*   # Video Extractor Wrappers
-*       - streamWishExtractor
-*       - voeExtractor
-*       - mp4UploadExtractor
-*       - yourUploadExtractor
-*       - streamTapeExtractor
-*       - sendVidExtractor
-*   
-*   # Video Extractor helpers
-*       - extractAny
-*   
-*   # Playlist Extractors
-*       - m3u8Extractor
-*       - jwplayerExtractor
-*   
-*   # Extension Helpers
-*       - sortVideos()
-*   
-*   # Uint8Array
-*       - Uint8Array.fromBase64()
-*       - Uint8Array.prototype.toBase64()
-*       - Uint8Array.prototype.decode()
-*   
-*   # String
-*       - String.prototype.encode()
-*       - String.decode()
-*       - String.prototype.reverse()
-*       - String.prototype.swapcase()
-*       - getRandomString()
-*
-*   # Encode/Decode Functions
-*       - decodeUTF8
-*       - encodeUTF8
-*   
-*   # Url
-*       - absUrl()
-*
-***************************************************************************************************/
-
 //--------------------------------------------------------------------------------------------------
-//  Video Extractors
+//  Video Extractors & Helpers (Invariati)
 //--------------------------------------------------------------------------------------------------
 
 async function vidGuardExtractor(url) {
-    // get html
     const res = await new Client().get(url);
     const doc = new Document(res.body);
     const script = doc.selectFirst('script:contains(eval)');
 
-    // eval code
     const code = script.text;
     eval?.('var window = {};');
     eval?.(code);
     const playlistUrl = globalThis.window.svg.stream;
 
-    // decode sig
     const encoded = playlistUrl.match(/sig=(.*?)&/)[1];
     const charCodes = [];
 
@@ -438,7 +387,7 @@ async function doodExtractor(url) {
 
     response = await new Client().get(`https://${doodhost}/pass_md5/${md5}`, { "Referer": newUrl });
     const videoUrl = `${response.body}${randomString}?token=${token}&expiry=${expiry}`;
-    const headers = { "User-Agent": "Mangayomi", "Referer": doodhost };
+    const headers = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": doodhost };
     return [{ url: videoUrl, originalUrl: videoUrl, headers: headers, quality: '' }];
 }
 
@@ -513,7 +462,6 @@ async function speedfilesExtractor(url) {
     const code = doc.selectFirst('script:contains(var)').text;
     let b64;
 
-    // Get b64
     for (const match of code.matchAll(/(?:var|let|const)\s*\w+\s*=\s*["']([^"']+)/g)) {
         if (match[1].match(/[g-zG-Z]/)) {
             b64 = match[1];
@@ -521,17 +469,13 @@ async function speedfilesExtractor(url) {
         }
     }
 
-    // decode b64 => b64
     const step1 = Uint8Array.fromBase64(b64).reverse().decode().swapcase();
-    // decode b64 => hex
     const step2 = Uint8Array.fromBase64(step1).reverse().decode();
-    // decode hex => b64
     let step3 = [];
     for (let i = 0; i < step2.length; i += 2) {
         step3.push(parseInt(step2.slice(i, i + 2), 16) - 3);
     }
     step3 = String.fromCharCode(...step3.reverse()).swapcase();
-    // decode b64 => url
     const videoUrl = Uint8Array.fromBase64(step3).decode();
     
     return [{url: videoUrl, originalUrl: videoUrl, quality: '', headers: null}];
@@ -540,12 +484,11 @@ async function speedfilesExtractor(url) {
 async function luluvdoExtractor(url) {
     const client = new Client();    
     const match = url.match(/(.*?:\/\/.*?)\/.*\/(.*)/);
-    const headers = {'user-agent': 'Mangayomi'};
+    const headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'};
     const res = await client.get(`${match[1]}/dl?op=embed&file_code=${match[2]}`, headers);    
     return await jwplayerExtractor(res.body, headers);
 }
 
-/** Does not work: Client always sets 'charset=utf-8' in Content-Type. */
 async function burstcloudExtractor(url) {
     let client = new Client();
     let res = await client.get(url);
@@ -555,9 +498,7 @@ async function burstcloudExtractor(url) {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         'Referer': url,
     };
-    const data = {
-        'fileId': id
-    };
+    const data = { 'fileId': id };
 
     res = await client.post(`https://www.burstcloud.co/file/play-request/`, headers, data);
     const videoUrl = res.body.match(/cdnUrl":"(.*?)"/)[1];
@@ -568,10 +509,6 @@ async function burstcloudExtractor(url) {
         quality: ''
     }];
 }
-
-//--------------------------------------------------------------------------------------------------
-//  Video Extractor Wrappers
-//--------------------------------------------------------------------------------------------------
 
 _streamWishExtractor = streamWishExtractor;
 streamWishExtractor = async (url) => {
@@ -620,18 +557,12 @@ sendVidExtractor = async (url) => {
         videoUrl = res.body.match(/og:video" content="(.*?\.mp4.*?)"/)[1];
         quality = res.body.match(/og:video:height" content="(.*?)"/)?.[1];
         quality = quality ? quality + 'p' : '';
-    } catch (error) {
-        
-    }
+    } catch (error) {}
     if (!videoUrl) {
         return _sendVidExtractor(url, null, '');
     }
     return [{url: videoUrl, originalUrl: videoUrl, quality: quality, headers: null}];
 }
-
-//--------------------------------------------------------------------------------------------------
-//  Video Extractor Helpers
-//--------------------------------------------------------------------------------------------------
 
 async function extractAny(url, method, lang, type, host, headers = null) {
     const m = extractAny.methods[method];
@@ -661,14 +592,7 @@ extractAny.methods = {
     'yourupload': yourUploadExtractor
 };
 
-//--------------------------------------------------------------------------------------------------
-//  Playlist Extractors
-//--------------------------------------------------------------------------------------------------
-
 async function m3u8Extractor(url, headers = null) {
-    // https://developer.apple.com/documentation/http-live-streaming/creating-a-multivariant-playlist
-    // https://developer.apple.com/documentation/http-live-streaming/adding-alternate-media-to-a-playlist
-    // define attribute lists
     const streamAttributes = [
         ['avg_bandwidth', /AVERAGE-BANDWIDTH=(\d+)/],
         ['bandwidth', /\bBANDWIDTH=(\d+)/],
@@ -702,7 +626,6 @@ async function m3u8Extractor(url, headers = null) {
         return [];
     }
 
-    // collect media
     for (const match of text.matchAll(/#EXT-X-MEDIA:(.*)/g)) {
         const info = match[1], medium = {};
         for (const attr of mediaAttributes) {
@@ -721,7 +644,6 @@ async function m3u8Extractor(url, headers = null) {
         typedict[group].push(medium);
     }
 
-    // collect streams
     for (const match of text.matchAll(/#EXT-X-STREAM-INF:(.*)\s*(.*)/g)) {
         const info = match[1], stream = { 'url': absUrl(match[2], url) };
         for (const attr of streamAttributes) {
@@ -734,7 +656,6 @@ async function m3u8Extractor(url, headers = null) {
         stream['subtitles'] = subtitles[stream.subtitles] ?? null;
         stream['captions'] = captions[stream.captions] ?? null;
 
-        // format resolution or bandwidth
         let quality;
         if (stream.resolution) {
             quality = stream.resolution.match(/x(\d+)/)[1] + 'p';
@@ -742,7 +663,6 @@ async function m3u8Extractor(url, headers = null) {
             quality = (parseInt(stream.avg_bandwidth ?? stream.bandwidth) / 1000000) + 'Mb/s'
         }
 
-        // add stream to list
         const subs = stream.subtitles?.map((s) => {
             return { file: s.uri, label: s.name };
         });
@@ -769,7 +689,6 @@ async function m3u8Extractor(url, headers = null) {
 }
 
 async function jwplayerExtractor(text, headers) {
-    // https://docs.jwplayer.com/players/reference/playlists
     const getsetup = /setup\(({[\s\S]*?})\)/;
     const getsources = /sources:\s*(\[[\s\S]*?\])/;
     const gettracks = /tracks:\s*(\[[\s\S]*?\])/;
@@ -806,10 +725,6 @@ async function jwplayerExtractor(text, headers) {
     });
 }
 
-//--------------------------------------------------------------------------------------------------
-//  Extension Helpers
-//--------------------------------------------------------------------------------------------------
-
 function sortVideos(videos) {
     const pref = new SharedPreferences();
     const getres = RegExp('(\\d+)p?', 'i');
@@ -840,10 +755,6 @@ function sortVideos(videos) {
         return qA.localeCompare(qB);
     });
 }
-
-//--------------------------------------------------------------------------------------------------
-//  Uint8Array
-//--------------------------------------------------------------------------------------------------
 
 Uint8Array.fromBase64 = function (b64) {
     const m = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, 62, -1, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, 63, -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1]
@@ -883,10 +794,6 @@ Uint8Array.prototype.decode = function (encoding = 'utf-8') {
     return null;
 }
 
-//--------------------------------------------------------------------------------------------------
-//  String
-//--------------------------------------------------------------------------------------------------
-
 String.prototype.encode = function (encoding = 'utf-8') {
     encoding = encoding.toLowerCase();
     if (encoding == 'utf-8') {
@@ -925,10 +832,6 @@ function getRandomString(length) {
     return result;
 }
 
-//--------------------------------------------------------------------------------------------------
-//  Encode/Decode Functions
-//--------------------------------------------------------------------------------------------------
-
 function decodeUTF8(data) {
     const codes = [];
     for (let i = 0; i < data.length;) {
@@ -957,10 +860,6 @@ function encodeUTF8(string) {
     }
     return new Uint8Array(data);
 }
-
-//--------------------------------------------------------------------------------------------------
-//  Url
-//--------------------------------------------------------------------------------------------------
 
 function absUrl(url, base) {
     if (url.search(/^\w+:\/\//) == 0) {
