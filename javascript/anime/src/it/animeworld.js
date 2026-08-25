@@ -7,7 +7,7 @@ const mangayomiSources = [{
     "typeSource": "single",
     "isManga": false,
     "itemType": 1,
-    "version": "0.0.24",
+    "version": "0.0.25",
     "dateFormat": "",
     "dateFormatLocale": "",
     "hasCloudflare": true,
@@ -122,38 +122,39 @@ class DefaultExtension extends MProvider {
         return detail;
     }
     // For anime episode video list
-    // For anime episode video list
     async getVideoList(url) {
-    // Recupera la pagina episodio per determinare il tipo audio (Doppiato/Subbato)
+        // Recupera la pagina episodio per determinare il tipo audio (Doppiato/Subbato)
         const res = await this.client.get(url);
         const doc = new Document(res.body);
         const type = doc.selectFirst('div.info div.info dt:contains(Audio) + dd').text.trim() == 'Italiano' ?
             'Doppiato' : 'Subbato';
 
-    // Estrai il token episodio dal JSON-LD incorporato nella pagina.
-    // Non ci si può fidare dell'URL passato: a volte manca del segmento
-    // episodio (es. link generati solo con lo slug dell'anime), mentre
-    // il JSON-LD riporta sempre l'URL completo e corretto dell'episodio
-    // effettivamente caricato dal sito.
+        // Estrai il token episodio dal JSON-LD incorporato nella pagina.
         let token;
         try {
             const ldJsonText = doc.selectFirst('script[type="application/ld+json"]').text;
-            const episodeUrl = JSON.parse(ldJsonText).url; // es. ".../ZSBvy3/"
-        token = episodeUrl.split('/').filter(Boolean).pop();
+            const episodeUrl = JSON.parse(ldJsonText).url;
+            token = episodeUrl.split('/').filter(Boolean).pop();
         } catch (error) {
-        // Fallback: se il JSON-LD manca o cambia formato, prova comunque
-        // con l'URL passato come prima.
             token = url.split('/').filter(Boolean).pop();
         }
 
-    // Chiama la nuova API interna AnimeWorld che restituisce l'iframe player
+        // Chiama la nuova API interna AnimeWorld che restituisce l'iframe player.
+        // Header necessari: il sito la tratta come una richiesta AJAX interna,
+        // quindi va accompagnata da Referer e X-Requested-With, altrimenti
+        // risponde con una pagina "decoy" invece del contenuto reale.
         const apiUrl = `${this.source.baseUrl}/api/episode/serverPlayerAnimeWorld?id=${token}`;
-        const apiRes = await this.client.get(apiUrl);
+        const apiRes = await this.client.get(apiUrl, {
+            'Referer': url,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json, text/javascript, */*; q=0.01'
+        });
+        console.log(apiRes.body); // temporaneo, per debug
         const apiDoc = new Document(apiRes.body);
 
         const videos = [];
 
-    // Il video è un <source src="..."> dentro un <video>
+        // Il video è un <source src="..."> dentro un <video>
         const videoUrl = apiDoc.selectFirst('source')?.getSrc;
         if (videoUrl) {
             videos.push({
