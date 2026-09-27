@@ -8,12 +8,23 @@ class AnimeSaturn extends MProvider {
 
   final Client client = Client();
 
+  // User-Agent predefinito per superare le verifiche HTTP
+  final String defaultUserAgent =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+  Map<String, String> getHeaders(String url) {
+    return {
+      "User-Agent": defaultUserAgent,
+      "Referer": "${source.baseUrl}/",
+    };
+  }
+
   @override
   Future<MPages> getPopular(int page) async {
-    final res =
-        (await client.get(
-          Uri.parse("${source.baseUrl}/ongoing/$page"),
-        )).body;
+    final res = (await client.get(
+      Uri.parse("${source.baseUrl}/ongoing/$page"),
+      headers: getHeaders("${source.baseUrl}/ongoing/$page"),
+    )).body;
 
     List<MManga> animeList = [];
 
@@ -44,17 +55,15 @@ class AnimeSaturn extends MProvider {
 
   @override
   Future<MPages> getLatestUpdates(int page) async {
-    final res =
-        (await client.get(
-          Uri.parse("${source.baseUrl}/newest?page=$page"),
-        )).body;
+    final res = (await client.get(
+      Uri.parse("${source.baseUrl}/newest?page=$page"),
+      headers: getHeaders("${source.baseUrl}/newest?page=$page"),
+    )).body;
 
     List<MManga> animeList = [];
 
     final urls = xpath(res, '//*[@class="card mb-4 shadow-sm"]/a/@href');
-
     final names = xpath(res, '//*[@class="card mb-4 shadow-sm"]/a/@title');
-
     final images = xpath(
       res,
       '//*[@class="card mb-4 shadow-sm"]/a/img[@class="new-anime"]/@src',
@@ -117,12 +126,16 @@ class AnimeSaturn extends MProvider {
       url += "&page=$page";
     }
 
-    final res = (await client.get(Uri.parse(url))).body;
+    final res = (await client.get(
+      Uri.parse(url),
+      headers: getHeaders(url),
+    )).body;
 
     List<MManga> animeList = [];
     List<String> urls = [];
     List<String> names = [];
     List<String> images = [];
+
     if (query.isNotEmpty) {
       urls = xpath(
         res,
@@ -140,9 +153,7 @@ class AnimeSaturn extends MProvider {
       );
     } else {
       urls = xpath(res, '//*[@class="card mb-4 shadow-sm"]/a/@href');
-
       names = xpath(res, '//*[@class="card mb-4 shadow-sm"]/a/text()');
-
       images = xpath(
         res,
         '//*[@class="card mb-4 shadow-sm"]/a/img[@class="new-anime"]/@src',
@@ -165,7 +176,11 @@ class AnimeSaturn extends MProvider {
       {"In corso": 0, "Finito": 1},
     ];
 
-    final res = (await client.get(Uri.parse(url))).body;
+    final res = (await client.get(
+      Uri.parse(url),
+      headers: getHeaders(url),
+    )).body;
+
     MManga anime = MManga();
     final detailsList = xpath(
       res,
@@ -226,10 +241,17 @@ class AnimeSaturn extends MProvider {
 
   @override
   Future<List<MVideo>> getVideoList(String url) async {
-    final res = (await client.get(Uri.parse(url))).body;
+    final res = (await client.get(
+      Uri.parse(url),
+      headers: getHeaders(url),
+    )).body;
 
     final urlVid = xpath(res, '//a[contains(@href,"/watch")]/@href').first;
-    final resVid = (await client.get(Uri.parse(urlVid))).body;
+    final resVid = (await client.get(
+      Uri.parse(urlVid),
+      headers: getHeaders(urlVid),
+    )).body;
+
     String masterUrl = "";
     if (resVid.contains("jwplayer(")) {
       masterUrl = substringBefore(substringAfter(resVid, "file: \""), "\"");
@@ -238,8 +260,14 @@ class AnimeSaturn extends MProvider {
     }
 
     List<MVideo> videos = [];
+    final streamHeaders = getHeaders(masterUrl);
+
     if (masterUrl.endsWith("playlist.m3u8")) {
-      final masterPlaylistRes = (await client.get(Uri.parse(masterUrl))).body;
+      final masterPlaylistRes = (await client.get(
+        Uri.parse(masterUrl),
+        headers: streamHeaders,
+      )).body;
+
       for (var it in substringAfter(
         masterPlaylistRes,
         "#EXT-X-STREAM-INF:",
@@ -258,6 +286,7 @@ class AnimeSaturn extends MProvider {
         video
           ..url = videoUrl
           ..originalUrl = videoUrl
+          ..headers = streamHeaders
           ..quality = quality;
         videos.add(video);
       }
@@ -266,6 +295,7 @@ class AnimeSaturn extends MProvider {
       video
         ..url = masterUrl
         ..originalUrl = masterUrl
+        ..headers = streamHeaders
         ..quality = "Qualità predefinita";
       videos.add(video);
     }
@@ -330,7 +360,7 @@ class AnimeSaturn extends MProvider {
         CheckBoxFilter("Yuri", "Yuri"),
       ]),
       GroupFilter("YearList", "Anno di Uscita", [
-        for (var i = 1969; i < 2022; i++)
+        for (var i = 1969; i < 2026; i++)
           CheckBoxFilter(i.toString(), i.toString()),
       ]),
       GroupFilter("StateList", "Stato", [
