@@ -6,13 +6,15 @@ class AnimeSaturn extends MProvider {
 
   MSource source;
 
-  final Client client = Client();
+  // Forza l'uso del client nativo anziché Dart per evitare blocchi sull'handshake TLS
+  final Client client = Client(useDartHttpClient: false);
 
-  @override
+  final String defaultUserAgent =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
   Map<String, String> getHeaders(String url) {
     return {
-      "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "User-Agent": defaultUserAgent,
       "Referer": "${source.baseUrl}/",
     };
   }
@@ -26,7 +28,6 @@ class AnimeSaturn extends MProvider {
 
     List<MManga> animeList = [];
 
-    // Estrazione flessibile tramite parser HTML se l'XPath fallisce su Cloudflare
     final doc = parseHtml(res);
     final elements = doc.select("div.sebox, div.card, div.item-archivio");
 
@@ -48,7 +49,6 @@ class AnimeSaturn extends MProvider {
       }
     }
 
-    // Fallback XPath originale se il selettor CSS è vuoto
     if (animeList.isEmpty) {
       final urls = xpath(res, '//div[contains(@class, "card")]/a/@href');
       var names = xpath(res, '//div[contains(@class, "card")]/a/@title');
@@ -372,7 +372,7 @@ class AnimeSaturn extends MProvider {
   List<MVideo> sortVideos(List<MVideo> videos, int sourceId) {
     String quality = getPreferenceValue(sourceId, "preferred_quality");
 
-    videos.sort((MVideo a, B) {
+    videos.sort((MVideo a, MVideo b) {
       int qualityMatchA = a.quality.contains(quality) ? 1 : 0;
       int qualityMatchB = b.quality.contains(quality) ? 1 : 0;
       if (qualityMatchA != qualityMatchB) {
