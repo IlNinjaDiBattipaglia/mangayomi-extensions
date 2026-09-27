@@ -1,9 +1,10 @@
 import '../../../../../model/source.dart';
 
 Source get animesaturn => _animesaturn;
-const _animesaturnVersion = "0.0.59";
+const _animesaturnVersion = "0.0.60"; // Incrementato per forzare l'aggiornamento
 const _animesaturnCodeUrl =
     "https://raw.githubusercontent.com/m2k3a/mangayomi-extensions/$branchName/dart/anime/src/it/animesaturn/animesaturn.dart";
+
 Source _animesaturn = Source(
   name: "AnimeSaturn",
   baseUrl: "https://www.animesaturn.net",
@@ -14,4 +15,5 @@ Source _animesaturn = Source(
   sourceCodeUrl: _animesaturnCodeUrl,
   version: _animesaturnVersion,
   itemType: ItemType.anime,
+  hasCloudflare: true, // <-- CRUCIALE: Dice a Mangayomi di usare il bypass Cloudflare
 );
