@@ -8,12 +8,11 @@ class AnimeSaturn extends MProvider {
 
   final Client client = Client();
 
-  final String defaultUserAgent =
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-
+  @override
   Map<String, String> getHeaders(String url) {
     return {
-      "User-Agent": defaultUserAgent,
+      "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       "Referer": "${source.baseUrl}/",
     };
   }
@@ -27,33 +26,45 @@ class AnimeSaturn extends MProvider {
 
     List<MManga> animeList = [];
 
-    // Fallback: prova prima la struttura 'card' (nuovo layout), poi 'sebox' (vecchio layout)
-    var urls = xpath(res, '//div[contains(@class, "card")]/a/@href');
-    var names = xpath(res, '//div[contains(@class, "card")]/a/@title');
-    var images = xpath(res, '//div[contains(@class, "card")]/a/img/@src');
+    // Estrazione flessibile tramite parser HTML se l'XPath fallisce su Cloudflare
+    final doc = parseHtml(res);
+    final elements = doc.select("div.sebox, div.card, div.item-archivio");
 
-    if (names.isEmpty) {
-      urls = xpath(
-        res,
-        '//*[@class="sebox"]/div[@class="msebox"]/div[@class="headsebox"]/div[@class="tisebox"]/h2/a/@href',
-      );
-      names = xpath(
-        res,
-        '//*[@class="sebox"]/div[@class="msebox"]/div[@class="headsebox"]/div[@class="tisebox"]/h2/a/text()',
-      );
-      images = xpath(
-        res,
-        '//*[@class="sebox"]/div[@class="msebox"]/div[@class="bigsebox"]/div/img/@src',
-      );
+    if (elements.isNotEmpty) {
+      for (var element in elements) {
+        final aTag = element.selectFirst("a");
+        final imgTag = element.selectFirst("img");
+        final title = aTag?.attr("title") ?? aTag?.text ?? "";
+        final link = aTag?.attr("href") ?? "";
+        final img = imgTag?.attr("src") ?? "";
+
+        if (title.isNotEmpty && link.isNotEmpty) {
+          MManga anime = MManga();
+          anime.name = formatTitle(title);
+          anime.imageUrl = img;
+          anime.link = link;
+          animeList.add(anime);
+        }
+      }
     }
 
-    for (var i = 0; i < names.length; i++) {
-      MManga anime = MManga();
-      anime.name = formatTitle(names[i]);
-      anime.imageUrl = i < images.length ? images[i] : "";
-      anime.link = i < urls.length ? urls[i] : "";
-      if (anime.name.isNotEmpty && anime.link.isNotEmpty) {
-        animeList.add(anime);
+    // Fallback XPath originale se il selettor CSS è vuoto
+    if (animeList.isEmpty) {
+      final urls = xpath(res, '//div[contains(@class, "card")]/a/@href');
+      var names = xpath(res, '//div[contains(@class, "card")]/a/@title');
+      if (names.isEmpty) {
+        names = xpath(res, '//div[contains(@class, "card")]/a/text()');
+      }
+      final images = xpath(res, '//div[contains(@class, "card")]/a/img/@src');
+
+      for (var i = 0; i < names.length; i++) {
+        MManga anime = MManga();
+        anime.name = formatTitle(names[i]);
+        anime.imageUrl = i < images.length ? images[i] : "";
+        anime.link = i < urls.length ? urls[i] : "";
+        if (anime.name.isNotEmpty && anime.link.isNotEmpty) {
+          animeList.add(anime);
+        }
       }
     }
 
@@ -68,23 +79,25 @@ class AnimeSaturn extends MProvider {
     )).body;
 
     List<MManga> animeList = [];
+    final doc = parseHtml(res);
+    final elements = doc.select("div.card");
 
-    final urls = xpath(res, '//div[contains(@class, "card")]/a/@href');
-    var names = xpath(res, '//div[contains(@class, "card")]/a/@title');
-    if (names.isEmpty) {
-      names = xpath(res, '//div[contains(@class, "card")]/a/text()');
-    }
-    final images = xpath(res, '//div[contains(@class, "card")]/a/img/@src');
+    for (var element in elements) {
+      final aTag = element.selectFirst("a");
+      final imgTag = element.selectFirst("img");
+      final title = aTag?.attr("title") ?? aTag?.text ?? "";
+      final link = aTag?.attr("href") ?? "";
+      final img = imgTag?.attr("src") ?? "";
 
-    for (var i = 0; i < names.length; i++) {
-      MManga anime = MManga();
-      anime.name = formatTitle(names[i]);
-      anime.imageUrl = i < images.length ? images[i] : "";
-      anime.link = i < urls.length ? urls[i] : "";
-      if (anime.name.isNotEmpty && anime.link.isNotEmpty) {
+      if (title.isNotEmpty && link.isNotEmpty) {
+        MManga anime = MManga();
+        anime.name = formatTitle(title);
+        anime.imageUrl = img;
+        anime.link = link;
         animeList.add(anime);
       }
     }
+
     return MPages(animeList, animeList.isNotEmpty);
   }
 
@@ -141,32 +154,25 @@ class AnimeSaturn extends MProvider {
     )).body;
 
     List<MManga> animeList = [];
-    List<String> urls = [];
-    List<String> names = [];
-    List<String> images = [];
+    final doc = parseHtml(res);
+    final elements = doc.select("div.item-archivio, div.card");
 
-    if (query.isNotEmpty) {
-      urls = xpath(res, '//div[contains(@class,"item-archivio")]//h3/a/@href');
-      names = xpath(res, '//div[contains(@class,"item-archivio")]//h3/a/text()');
-      images = xpath(res, '//div[contains(@class,"item-archivio")]/a/img/@src');
-    } else {
-      urls = xpath(res, '//div[contains(@class, "card")]/a/@href');
-      names = xpath(res, '//div[contains(@class, "card")]/a/@title');
-      if (names.isEmpty) {
-        names = xpath(res, '//div[contains(@class, "card")]/a/text()');
-      }
-      images = xpath(res, '//div[contains(@class, "card")]/a/img/@src');
-    }
+    for (var element in elements) {
+      final aTag = element.selectFirst("a.badge-archivio, a");
+      final imgTag = element.selectFirst("img");
+      final title = aTag?.text ?? "";
+      final link = aTag?.attr("href") ?? "";
+      final img = imgTag?.attr("src") ?? "";
 
-    for (var i = 0; i < names.length; i++) {
-      MManga anime = MManga();
-      anime.name = formatTitle(names[i]);
-      anime.imageUrl = i < images.length ? images[i] : "";
-      anime.link = i < urls.length ? urls[i] : "";
-      if (anime.name.isNotEmpty && anime.link.isNotEmpty) {
+      if (title.isNotEmpty && link.isNotEmpty) {
+        MManga anime = MManga();
+        anime.name = formatTitle(title);
+        anime.imageUrl = img;
+        anime.link = link;
         animeList.add(anime);
       }
     }
+
     return MPages(animeList, query.isEmpty && animeList.isNotEmpty);
   }
 
@@ -182,56 +188,18 @@ class AnimeSaturn extends MProvider {
     )).body;
 
     MManga anime = MManga();
-    final detailsList = xpath(
-      res,
-      '//div[contains(@class, "bg-dark-as-box")]/text()',
-    );
-    if (detailsList.isNotEmpty) {
-      final details = detailsList.first;
-      if (details.contains("Stato:") && details.contains("Data di uscita:")) {
-        anime.status = parseStatus(
-          details.substring(
-            details.indexOf("Stato:") + 6,
-            details.indexOf("Data di uscita:"),
-          ),
-          statusList,
-        );
-      }
-    }
+    final doc = parseHtml(res);
 
-    final description = xpath(res, '//*[@id="shown-trama"]/text()');
-    final descriptionFull = xpath(res, '//*[@id="full-trama"]/text()');
-    if (description.isNotEmpty) {
-      anime.description = description.first;
-    } else {
-      anime.description = "";
-    }
-    if (descriptionFull.isNotEmpty) {
-      if (descriptionFull.first.length > anime.description.length) {
-        anime.description = descriptionFull.first;
-      }
-    }
+    final description = doc.selectFirst("#full-trama")?.text ?? doc.selectFirst("#shown-trama")?.text ?? "";
+    anime.description = description;
 
-    anime.genre = xpath(
-      res,
-      '//a[contains(@href, "genre")]/text()',
-    );
+    final epElements = doc.select("a.episodi-link-button");
+    List<MChapter> episodesList = [];
 
-    final epUrls = xpath(
-      res,
-      '//a[contains(@class, "episodi-link-button")]/@href',
-    );
-
-    final titles = xpath(
-      res,
-      '//a[contains(@class, "episodi-link-button")]/text()',
-    );
-
-    List<MChapter>? episodesList = [];
-    for (var i = 0; i < epUrls.length; i++) {
+    for (var i = 0; i < epElements.length; i++) {
       MChapter episode = MChapter();
-      episode.name = i < titles.length ? titles[i] : "Episodio ${i + 1}";
-      episode.url = epUrls[i];
+      episode.name = epElements[i].text.trim();
+      episode.url = epElements[i].attr("href") ?? "";
       episodesList.add(episode);
     }
 
@@ -246,13 +214,14 @@ class AnimeSaturn extends MProvider {
       headers: getHeaders(url),
     )).body;
 
-    final urlVidList = xpath(res, '//a[contains(@href,"/watch")]/@href');
-    if (urlVidList.isEmpty) return [];
+    final doc = parseHtml(res);
+    final watchLink = doc.selectFirst("a[href*='/watch']")?.attr("href");
 
-    final urlVid = urlVidList.first;
+    if (watchLink == null || watchLink.isEmpty) return [];
+
     final resVid = (await client.get(
-      Uri.parse(urlVid),
-      headers: getHeaders(urlVid),
+      Uri.parse(watchLink),
+      headers: getHeaders(watchLink),
     )).body;
 
     String masterUrl = "";
@@ -403,15 +372,9 @@ class AnimeSaturn extends MProvider {
   List<MVideo> sortVideos(List<MVideo> videos, int sourceId) {
     String quality = getPreferenceValue(sourceId, "preferred_quality");
 
-    videos.sort((MVideo a, MVideo b) {
-      int qualityMatchA = 0;
-      if (a.quality.contains(quality)) {
-        qualityMatchA = 1;
-      }
-      int qualityMatchB = 0;
-      if (b.quality.contains(quality)) {
-        qualityMatchB = 1;
-      }
+    videos.sort((MVideo a, B) {
+      int qualityMatchA = a.quality.contains(quality) ? 1 : 0;
+      int qualityMatchB = b.quality.contains(quality) ? 1 : 0;
       if (qualityMatchA != qualityMatchB) {
         return qualityMatchB - qualityMatchA;
       }
